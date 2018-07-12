@@ -4,6 +4,7 @@
 //typedef int (*callback)(int,int);
 typedef int (*OnGoReceivedBiz)(CConnectionInterface*, int, const void*, int );
 
+typedef int (*OnGoSubscribeReceivedBiz)(CSubscribeInterface*,int ,const void*,int);
 
 
 class CCallback : public CCallbackInterface
@@ -128,6 +129,45 @@ void CCallback::OnReceivedBizMsg(CConnectionInterface *lpConnection, int hSend, 
 }
 
 
+
+
+class CSubCallback : public CSubCallbackInterface
+{
+    public:
+        void* onGoSubscribeReceivedBiz;
+    
+	unsigned long  FUNCTION_CALL_MODE QueryInterface(const char *iid, IKnown **ppv)
+	{
+		return 0;
+	}
+	unsigned long  FUNCTION_CALL_MODE AddRef()
+	{
+		return 0;
+	}
+	unsigned long  FUNCTION_CALL_MODE Release()
+	{
+		return 0;
+	}
+
+	void FUNCTION_CALL_MODE OnReceived(CSubscribeInterface *lpSub,int subscribeIndex, const void *lpData, int nLength,LPSUBSCRIBE_RECVDATA lpRecvData);
+	void FUNCTION_CALL_MODE OnRecvTickMsg(CSubscribeInterface *lpSub,int subscribeIndex,const char* TickMsgInfo);
+};
+void CSubCallback::OnReceived(CSubscribeInterface *lpSub,int subscribeIndex, const void *lpData, int nLength,
+	LPSUBSCRIBE_RECVDATA lpRecvData)
+{
+    if(NULL!=onGoSubscribeReceivedBiz)
+    {
+        ((OnGoSubscribeReceivedBiz)onGoSubscribeReceivedBiz)(lpSub,subscribeIndex,lpData,nLength);
+    }
+}
+void CSubCallback::OnRecvTickMsg(CSubscribeInterface *lpSub,int subscribeIndex,const char* TickMsgInfo)
+{
+
+}
+
+
+
+
 //Release接口
 extern "C"
 {
@@ -239,6 +279,9 @@ extern "C"{
     void FreeMem(IF2Packer* packer){
         packer->FreeMem(packer->GetPackBuf());
    }
+   IF2UnPacker* UnPack(IF2Packer* packer){
+       return packer->UnPack();
+   }
 }
 
 //解包器
@@ -304,17 +347,83 @@ extern "C"{
     void Go(void** pointer,int rowNo){
             ((IF2UnPacker *)pointer)->Go(rowNo);
    }
-
-
-//    void some_c_func(void*  p)
-//     {
-//         //int arg = 2;
-//         //printf("C.some_c_func(): calling callback with arg = %d\n", arg);
-//         int response = ((callback)p)(2,3);
-//         printf("C.some_c_func(): callback responded with %d\n", response);
-//     }
 }
 
+
+extern "C"{
+    static CSubCallback cSubCallback;
+    //消息接口
+    CPublishInterface* GetNewPublisher(CConnectionInterface* conn,char* pubName,int msgCount,int timeOut){
+       return conn->NewPublisher(pubName,msgCount,timeOut);
+    }
+    const char* GetMCLastError(CConnectionInterface* conn){
+       return conn->GetMCLastError();
+    }
+    int PubMsgByPacker(CPublishInterface* lpPublish,char* topicName,IF2UnPacker* unPack,int timeOut ){
+        lpPublish->PubMsgByPacker(topicName,unPack,timeOut);
+    }
+
+   int RegisteredSubscribeCallBack(void* onGoSubscribecallback){
+       if(NULL!=onGoSubscribecallback)
+       {
+           cSubCallback.onGoSubscribeReceivedBiz=onGoSubscribecallback;
+           return 1;
+       }
+       return 0;
+   }
+   CSubscribeInterface* GetNewSubscriber(CConnectionInterface* conn,char* subName,int timeOut){
+       if(NULL!=cSubCallback.onGoSubscribeReceivedBiz)
+       {
+           return conn->NewSubscriber(&cSubCallback,subName,timeOut);
+       }
+       return conn->NewSubscriber(NULL,subName,timeOut);
+   }
+
+   CSubscribeParamInterface* GetNewSubscribeParam(){
+       return NewSubscribeParam();
+   }
+
+   void SetFromNow(CSubscribeParamInterface* lpSubscribeParam,int isFromNow=0){
+	    if (isFromNow==0)
+		{
+			lpSubscribeParam->SetFromNow(true);
+		}
+		else
+		{
+			lpSubscribeParam->SetFromNow(false);
+		}
+   }
+    void SetReplace(CSubscribeParamInterface* lpSubscribeParam,int isReplace=0){
+	    if (isReplace==0)
+		{
+			lpSubscribeParam->SetReplace(true);
+		}
+		else
+		{
+			lpSubscribeParam->SetReplace(false);
+		}
+    }
+    void SetTopicName(CSubscribeParamInterface* lpSubscribeParam,char* topicName){
+        lpSubscribeParam->SetTopicName(topicName);
+    }
+    void SetAppData(CSubscribeParamInterface* lpSubscribeParam,void * appData,int nAppData){
+            lpSubscribeParam->SetAppData(appData,nAppData);
+    }
+    void SetFilter(CSubscribeParamInterface* lpSubscribeParam,char* filterName,char* filterValue){
+            lpSubscribeParam->SetFilter(filterName,filterValue);
+    }
+    void SetSendInterval(CSubscribeParamInterface* lpSubscribeParam,int sendInterval){
+        lpSubscribeParam->SetSendInterval(sendInterval);
+    }
+
+    int SubscribeTopic(CSubscribeInterface* lpSub,CSubscribeParamInterface* lpSubscribeParam,int uTimeOut){
+       return lpSub->SubscribeTopic(lpSubscribeParam,uTimeOut);
+    }
+
+    int CancelSubscribeTopic(CSubscribeInterface* lpSub,int subIndex){
+       return lpSub->CancelSubscribeTopic(subIndex);
+    }
+}
 
 
 
